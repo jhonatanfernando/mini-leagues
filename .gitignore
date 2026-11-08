@@ -3,6 +3,7 @@
 *.tfstate
 *.tfstate.*
 *.tfplan
+*.s3.tfbackend
 crash.log
 crash.*.log
 
@@ -15,6 +16,7 @@ crash.*.log
 
 # Compiled Go executables and Lambda packages
 **/bootstrap
+!infra/bootstrap/
 **/create-league
 **/create-league.exe
 **/function.zip

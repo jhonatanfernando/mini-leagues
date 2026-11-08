@@ -1,0 +1,4 @@
+# Activate only after the bucket exists and state migration is authorized.
+terraform {
+  backend "s3" {}
+}

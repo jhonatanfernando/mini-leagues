@@ -1,0 +1,6 @@
+bucket              = "mini-leagues-tfstate-123456789012-us-east-2"
+key                 = "mini-leagues/dev/terraform.tfstate"
+region              = "us-east-2"
+allowed_account_ids = ["123456789012"]
+encrypt             = true
+use_lockfile        = true

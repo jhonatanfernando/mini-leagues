@@ -1,0 +1,4 @@
+# Bootstrap initially uses local state. Activate after bucket creation and review.
+terraform {
+  backend "s3" {}
+}

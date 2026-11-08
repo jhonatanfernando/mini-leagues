@@ -99,18 +99,29 @@ finally {
 
 Use the Lambda ZIP utility instead of `Compress-Archive` to preserve the executable permissions needed on Linux.
 
+### Terraform state setup
+
+Both Terraform roots now use the S3 backend. Follow the
+[S3 state runbook](docs/s3-state-migration.md) for initialization and recovery.
+The backend bucket is managed separately in `infra/bootstrap/`; the existing
+learning bucket and application resource addresses are preserved.
+
 ### Deploy with Terraform
 
 After packaging, run from the repository root:
+Create `infra/dev.s3.tfbackend` from its `.example` file with the actual bucket
+and account values if this is a fresh checkout.
 
 ```bash
-terraform -chdir=infra init
+AWS_PROFILE=terraform-dev terraform -chdir=infra init -backend-config=dev.s3.tfbackend
 terraform -chdir=infra validate
 terraform -chdir=infra plan
 terraform -chdir=infra apply
 ```
 
 Run these commands in an environment with valid AWS credentials.
+Terraform plans require explicit task authorization. Apply requires separate
+authorization after reviewing the plan; the commands above are not approval.
 
 Terraform detects changes to the ZIP through `source_code_hash` and updates the Lambda.
 
