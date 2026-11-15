@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -146,4 +147,64 @@ func assertResponse(t *testing.T, resp events.APIGatewayV2HTTPResponse, err erro
 	if err != nil || resp.StatusCode != status || resp.Body != body || resp.Headers["Content-Type"] != "application/json" || !json.Valid([]byte(resp.Body)) {
 		t.Fatalf("response = %+v, error = %v; want %d %s", resp, err, status, body)
 	}
+}
+
+// These tests describe the Phase 4 contract, including the compatibility changes.
+func TestCreateLeagueContract(t *testing.T) {
+	valid := `{"leagueId":"L","name":"N","ownerId":"O"}`
+	makeBody := func(id, name, owner string) string {
+		t.Helper()
+		data, err := json.Marshal(CreateLeagueRequest{LeagueID: id, Name: name, OwnerID: owner})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(data)
+	}
+	for _, tc := range []struct {
+		name, body string
+		encoded    bool
+		status     int
+		message    string
+	}{
+		{"null object", `null`, false, 400, "Invalid JSON"},
+		{"array", `[]`, false, 400, "Invalid JSON"},
+		{"unknown field", `{"leagueId":"L","name":"N","ownerId":"O","admin":true}`, false, 400, "Invalid JSON"},
+		{"trailing object", valid + ` {}`, false, 400, "Invalid JSON"},
+		{"wrong field type", `{"leagueId":42,"name":"N","ownerId":"O"}`, false, 400, "Invalid JSON"},
+		{"invalid utf8", "{\"leagueId\":\"\xff\",\"name\":\"N\",\"ownerId\":\"O\"}", false, 400, "Invalid JSON"},
+		{"oversized plain", valid + strings.Repeat(" ", 16385-len(valid)), false, 413, "Request body is too large"},
+		{"oversized base64", base64.StdEncoding.EncodeToString([]byte(valid + strings.Repeat(" ", 16385-len(valid)))), true, 413, "Request body is too large"},
+		{"long id", makeBody(strings.Repeat("a", 129), "N", "O"), false, 400, "leagueId and ownerId must be at most 128 bytes"},
+		{"long owner", makeBody("L", "N", strings.Repeat("a", 129)), false, 400, "leagueId and ownerId must be at most 128 bytes"},
+		{"multibyte id", makeBody(strings.Repeat("é", 65), "N", "O"), false, 400, "leagueId and ownerId must be at most 128 bytes"},
+		{"long name", makeBody("L", strings.Repeat("界", 201), "O"), false, 400, "name must be at most 200 characters"},
+		{"body boundary", valid + strings.Repeat(" ", 16384-len(valid)), false, 201, ""},
+		{"base64 boundary", base64.StdEncoding.EncodeToString([]byte(valid + strings.Repeat(" ", 16384-len(valid)))), true, 201, ""},
+		{"field boundaries", makeBody(" "+strings.Repeat("a", 128)+" ", " "+strings.Repeat("界", 200)+" ", strings.Repeat("b", 128)), false, 201, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			called := false
+			app := application{db: fakeDynamo{put: func(context.Context, *dynamodb.PutItemInput) (*dynamodb.PutItemOutput, error) {
+				called = true
+				return &dynamodb.PutItemOutput{}, nil
+			}}}
+			resp, err := app.createLeague(context.Background(), events.APIGatewayV2HTTPRequest{Body: tc.body, IsBase64Encoded: tc.encoded})
+			if tc.status == 201 {
+				if err != nil || resp.StatusCode != 201 || !called {
+					t.Fatalf("response %+v, err %v, called %v", resp, err, called)
+				}
+			} else {
+				assertResponse(t, resp, err, tc.status, `{"message":"`+tc.message+`"}`)
+				if called {
+					t.Fatal("invalid request reached DynamoDB")
+				}
+			}
+		})
+	}
+}
+
+func TestGetLeagueIdentifierLimit(t *testing.T) {
+	app := application{}
+	resp, err := app.getLeague(context.Background(), events.APIGatewayV2HTTPRequest{PathParameters: map[string]string{"leagueId": strings.Repeat("a", 129)}})
+	assertResponse(t, resp, err, 400, `{"message":"leagueId must be at most 128 bytes"}`)
 }

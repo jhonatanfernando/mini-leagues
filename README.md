@@ -34,10 +34,37 @@ AWS region and credentials follow the SDK's default configuration chain.
   a UTC RFC3339 `createdAt`; absent IDs return 404 and blank IDs return 400.
 - Service or item-decoding failures return generic 500 messages.
 
-Current compatibility behavior accepts unknown JSON fields and imposes no
-application length limits. IAM authenticates the caller, but `ownerId` is supplied
-by the client and reads do not enforce ownership. Keep this for developer use;
-multiuser access needs an explicit ownership policy first.
+Request validation (Phase 4 compatibility changes):
+
+- POST accepts exactly one UTF-8 JSON object. Unknown fields, trailing JSON values,
+  arrays, malformed JSON, and a top-level `null` return 400 (`Invalid JSON`).
+  Missing, null, or blank required fields return the existing required-fields error.
+  Field matching follows Go's JSON decoder (case-insensitive matches are accepted;
+  duplicate fields use the last value). Use the documented camelCase field names.
+- The decoded POST body may contain at most 16 KiB (16,384 bytes), including JSON
+  syntax and whitespace. Larger bodies return 413 (`Request body is too large`).
+  For base64 requests, the encoded string is also bounded to 21,848 bytes before
+  decoding; send standard base64 without inserted line breaks. Invalid base64
+  within this bound returns the existing 400 (`Invalid request body`).
+- After trimming surrounding whitespace, `leagueId` and `ownerId` are limited to
+  128 UTF-8 bytes each. The same league ID limit applies to GET. POST returns 400
+  (`leagueId and ownerId must be at most 128 bytes`); GET returns 400
+  (`leagueId must be at most 128 bytes`). No new identifier character set is imposed.
+- Trimmed names may contain at most 200 Unicode code points, rather than bytes;
+  longer names return 400 (`name must be at most 200 characters`). A visual symbol
+  containing combining marks can count as multiple code points.
+
+Previously accepted unknown fields and overlong inputs are now rejected. Existing
+stored leagues are not rewritten; GET requests for pre-existing IDs longer than
+128 bytes are also rejected. Review any existing callers/data before deployment.
+Successful response shapes, conditional-create conflicts, and consistent reads
+are unchanged.
+
+The current access policy is developer-only: IAM authorizes invocation, but
+`ownerId` remains client-supplied metadata, and any authorized caller can read a
+league by ID. It is not an ownership security boundary. Multiuser access or real
+personal data requires a separately defined authenticated-principal/user mapping
+and ownership enforcement; that feature is not implemented here.
 
 For signed requests, set `API_URL` to the deployed stage URL, `AWS_REGION` to its
 region, and supply temporary credentials through your normal credential process.

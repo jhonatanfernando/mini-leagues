@@ -18,8 +18,14 @@ Status: implementation in progress, November 15, 2026.
   Both tables and their recovery settings remain unchanged pending a retention
   decision. Inspector trust/read scope was reviewed in source and preserved;
   continued need for the role and caller-policy review remain outstanding.
-- Phase 4 remains: limits/JSON policy and authenticated ownership decisions.
-  Current behavior and ownership limitations are now documented and tested.
+- Phase 4 request contract implemented with tests written before enforcement:
+  16 KiB decoded bodies (413), one UTF-8 JSON object, unknown-field rejection,
+  trimmed 128-byte identifiers and 200-code-point names (400). README documents
+  compatibility changes, decoder field matching, and unchanged success/conflict
+  semantics. The developer-only access policy explicitly treats ownerId as
+  metadata; authenticated ownership remains required before multiuser exposure.
+  Request correlation is still pending with Phase 5 structured logging.
+  Go checks and Linux ZIP verification pass; deployment has not been performed.
 - Phase 5 remains: structured logging, access logs, alert destinations/thresholds,
   budget settings, and operational runbooks.
 - Phase 6 remains: credential-free CI and reviewed artifact/plan delivery.

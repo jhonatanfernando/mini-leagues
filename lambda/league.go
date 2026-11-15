@@ -1,19 +1,30 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+)
+
+// Bound input before decoding or writing it. IDs use bytes; display names use
+// Unicode code points so non-ASCII names have the same character allowance.
+const (
+	maxLeagueBodyBytes      = 16 * 1024
+	maxLeagueIDBytes        = 128
+	maxLeagueNameCharacters = 200
 )
 
 type League struct {
@@ -34,6 +45,14 @@ type CreateLeagueResponse struct {
 }
 
 func (app *application) createLeague(ctx context.Context, event events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
+	// Bound the encoded representation too, before allocating a decoded buffer.
+	bodyLimit := maxLeagueBodyBytes
+	if event.IsBase64Encoded {
+		bodyLimit = base64.StdEncoding.EncodedLen(maxLeagueBodyBytes)
+	}
+	if len(event.Body) > bodyLimit {
+		return jsonResponse(413, map[string]string{"message": "Request body is too large"}), nil
+	}
 	body := []byte(event.Body)
 
 	if event.IsBase64Encoded {
@@ -46,11 +65,24 @@ func (app *application) createLeague(ctx context.Context, event events.APIGatewa
 		body = decoded
 	}
 
-	var request CreateLeagueRequest
-	if err := json.Unmarshal(body, &request); err != nil {
+	if len(body) > maxLeagueBodyBytes {
+		return jsonResponse(413, map[string]string{"message": "Request body is too large"}), nil
+	}
+
+	// A pointer distinguishes a JSON null from an object. A second decode rejects
+	// trailing values; DisallowUnknownFields catches misspelled request fields.
+	var request *CreateLeagueRequest
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	err := decoder.Decode(&request)
+	if err != nil || request == nil || !utf8.Valid(body) {
 		return jsonResponse(400, map[string]string{
 			"message": "Invalid JSON",
 		}), nil
+	}
+
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		return jsonResponse(400, map[string]string{"message": "Invalid JSON"}), nil
 	}
 
 	request.LeagueID = strings.TrimSpace(request.LeagueID)
@@ -61,6 +93,13 @@ func (app *application) createLeague(ctx context.Context, event events.APIGatewa
 		return jsonResponse(400, map[string]string{
 			"message": "leagueId, name and ownerId are required",
 		}), nil
+	}
+
+	if len(request.LeagueID) > maxLeagueIDBytes || len(request.OwnerID) > maxLeagueIDBytes {
+		return jsonResponse(400, map[string]string{"message": "leagueId and ownerId must be at most 128 bytes"}), nil
+	}
+	if utf8.RuneCountInString(request.Name) > maxLeagueNameCharacters {
+		return jsonResponse(400, map[string]string{"message": "name must be at most 200 characters"}), nil
 	}
 
 	league := League{
@@ -110,6 +149,10 @@ func (app *application) getLeague(ctx context.Context, event events.APIGatewayV2
 		return jsonResponse(400, map[string]string{
 			"message": "leagueId is required",
 		}), nil
+	}
+
+	if len(leagueID) > maxLeagueIDBytes {
+		return jsonResponse(400, map[string]string{"message": "leagueId must be at most 128 bytes"}), nil
 	}
 
 	result, err := app.db.GetItem(ctx, &dynamodb.GetItemInput{
