@@ -120,8 +120,10 @@ persistence and recovery are verified.
 
 Copy `infra/dev.s3.tfbackend.example` to `infra/dev.s3.tfbackend`, replacing the
 bucket and account placeholders with the reviewed values. These local files are
-ignored. Backend authentication uses `AWS_PROFILE`, separately from the existing
-provider's `profile` setting; use the same intended account for both.
+ignored. Backend authentication and provider authentication independently use the AWS
+credential chain. Export `AWS_PROFILE` for the session when using a local profile;
+set the application's `account_id` variable and backend account guard to the same
+intended account. The provider no longer embeds a profile name.
 
 After explicit state-migration authorization, activate and migrate:
 

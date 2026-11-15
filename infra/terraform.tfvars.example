@@ -1,0 +1,12 @@
+# Copy to terraform.tfvars (ignored); match the reviewed backend account.
+account_id = "123456789012"
+
+# Defaults preserve existing resource names and runtime settings.
+region                     = "us-east-2"
+environment                = "dev"
+owner                      = "jhonatan.oliveira"
+log_retention_days         = 7
+lambda_memory_mb           = 128
+lambda_timeout_seconds     = 10
+api_throttling_burst_limit = 5
+api_throttling_rate_limit  = 2

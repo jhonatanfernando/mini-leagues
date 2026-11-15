@@ -10,6 +10,10 @@ terraform {
 }
 
 provider "aws" {
-  region  = "us-east-2"
-  profile = "terraform-dev"
+  region              = var.region
+  allowed_account_ids = [var.account_id]
+
+  default_tags {
+    tags = local.common_tags
+  }
 }

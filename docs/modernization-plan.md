@@ -1,6 +1,31 @@
 # Mini-leagues modernization plan
 
-Status: proposed, November 8, 2026. Planning only; no AWS resources or state have been changed.
+Status: implementation in progress, November 15, 2026.
+
+## Progress audit (source only)
+
+- Phase 1 implemented: small DynamoDB interface, offline handler/router/response
+  tests, local check/package scripts, dependency classification, and API/setup
+  documentation. The placeholder module path remains pending confirmed identity.
+- Phase 2: `docs/s3-state-migration.md` records completed migration and remote
+  verification of both roots. No post-migration plan or lock-contention test is
+  recorded; these checks still require their own authorization.
+- Phase 3 configuration prepared: validated settings, common provider tags,
+  credential-chain authentication, provider account guard, and a local variable
+  example. Default names/settings and all resource addresses are preserved.
+  Formatting and offline validation pass; no plan or apply was run. An explicitly
+  authorized plan must verify intended tag updates and absence of resource churn.
+  Both tables and their recovery settings remain unchanged pending a retention
+  decision. Inspector trust/read scope was reviewed in source and preserved;
+  continued need for the role and caller-policy review remain outstanding.
+- Phase 4 remains: limits/JSON policy and authenticated ownership decisions.
+  Current behavior and ownership limitations are now documented and tested.
+- Phase 5 remains: structured logging, access logs, alert destinations/thresholds,
+  budget settings, and operational runbooks.
+- Phase 6 remains: credential-free CI and reviewed artifact/plan delivery.
+
+The findings table below records the original baseline, rather than current
+completion. This update makes no live AWS or Terraform-state claims.
 
 ## Direction
 

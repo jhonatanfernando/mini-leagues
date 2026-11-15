@@ -10,8 +10,13 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 )
 
+type dynamoDB interface {
+	PutItem(context.Context, *dynamodb.PutItemInput, ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error)
+	GetItem(context.Context, *dynamodb.GetItemInput, ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error)
+}
+
 type application struct {
-	db           *dynamodb.Client
+	db           dynamoDB
 	leaguesTable string
 }
 

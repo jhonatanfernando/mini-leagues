@@ -42,7 +42,7 @@ resource "aws_iam_role_policy" "create_league" {
 
 resource "aws_cloudwatch_log_group" "create_league" {
   name              = "/aws/lambda/joliveira-create-league"
-  retention_in_days = 7
+  retention_in_days = var.log_retention_days
 }
 
 resource "aws_lambda_function" "create_league" {
@@ -56,8 +56,8 @@ resource "aws_lambda_function" "create_league" {
   filename         = "${path.module}/artifacts/function.zip"
   source_code_hash = filebase64sha256("${path.module}/artifacts/function.zip")
 
-  memory_size = 128
-  timeout     = 10
+  memory_size = var.lambda_memory_mb
+  timeout     = var.lambda_timeout_seconds
 
   environment {
     variables = {

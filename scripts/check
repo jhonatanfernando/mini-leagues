@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/../lambda"
+export CGO_ENABLED=0
+unformatted=$(gofmt -l .)
+if [[ -n "$unformatted" ]]; then
+  printf 'Run gofmt on:\n%s\n' "$unformatted" >&2
+  exit 1
+fi
+go test ./...
+go vet ./...
+go mod verify
+GOOS=linux GOARCH=amd64 go build -o bootstrap .
