@@ -30,3 +30,8 @@ Thumbs.db
 
 # Windows metadata copied into WSL
 *:Zone.Identifier
+
+# Web dependencies and build output
+web/node_modules/
+web/dist/
+*.tsbuildinfo

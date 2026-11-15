@@ -1,7 +1,37 @@
-# Mini-leagues
+# Podium Picks (mini-leagues)
 
 A learning project using Go Lambda, API Gateway HTTP API, DynamoDB, and Terraform.
 The API creates and retrieves leagues; both routes require AWS IAM authorization.
+
+## Repository structure
+
+```text
+lambda/   Go Lambda API and domain rules (including podium validation/scoring)
+web/      TypeScript + Vite browser application
+infra/    Terraform application infrastructure; bootstrap/ manages state storage
+scripts/  Offline Go checks and Lambda packaging
+docs/     Plans and operational runbooks
+```
+
+The web app and Lambda build independently. Keep the existing Go module and
+Terraform resource addresses in place while the product takes shape; no workspace
+manager or additional backend layer is needed. The current API implements league
+creation/retrieval; browser sign-in and game endpoints remain future tasks.
+
+## Web development
+
+Install Node.js 24 LTS and npm in your development environment. From the root:
+
+```bash
+cd web
+npm ci
+npm run dev
+```
+
+For verification and a static production build, run `npm run build` from `web/`.
+Output goes to ignored `web/dist/`. See [web setup](web/README.md) for details.
+The initial page is a scaffold, with no login or API requests. Existing AWS_IAM
+routes cannot yet be used by friends; Cognito/JWT integration is planned.
 
 ## Local checks
 
