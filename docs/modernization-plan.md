@@ -8,8 +8,10 @@ The [playable milestone contract](podium-picks-milestone.md) now defines the gam
 API, permissions, storage, and acceptance gates. Pure podium validation/scoring
 and the web scaffold exist. [Cognito foundation](cognito-setup.md) is prepared in
 Terraform; it is not deployed or attached to the existing AWS_IAM routes. Go
-identity extraction is implemented and tested but not wired to handlers yet.
-Membership/organizer enforcement and browser login remain follow-ups.
+identity extraction and membership checks now protect GET league in source.
+Organizer creation, MEMBERS_TABLE_NAME/permission wiring, JWT route transition,
+and browser login remain follow-ups. Do not deploy the intermediate handler on
+its own: current Terraform still authorizes routes with AWS_IAM.
 This feature work does not mark outstanding operational phases complete.
 
 ## Progress audit (source only)

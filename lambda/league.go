@@ -143,6 +143,11 @@ func (app *application) createLeague(ctx context.Context, event events.APIGatewa
 }
 
 func (app *application) getLeague(ctx context.Context, event events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
+	memberID, err := authenticatedUserID(event)
+	if err != nil {
+		return jsonResponse(401, map[string]string{"message": "Unauthorized"}), nil
+	}
+
 	leagueID := strings.TrimSpace(event.PathParameters["leagueId"])
 
 	if leagueID == "" {
@@ -153,6 +158,14 @@ func (app *application) getLeague(ctx context.Context, event events.APIGatewayV2
 
 	if len(leagueID) > maxLeagueIDBytes {
 		return jsonResponse(400, map[string]string{"message": "leagueId must be at most 128 bytes"}), nil
+	}
+
+	if err := app.requireMembership(ctx, leagueID, memberID); err != nil {
+		if errors.Is(err, errForbidden) {
+			return jsonResponse(403, map[string]string{"message": "Forbidden"}), nil
+		}
+		log.Printf("authorize league read failed: %v", err)
+		return jsonResponse(500, map[string]string{"message": "Unable to retrieve league"}), nil
 	}
 
 	result, err := app.db.GetItem(ctx, &dynamodb.GetItemInput{

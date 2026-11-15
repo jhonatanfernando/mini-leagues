@@ -12,7 +12,8 @@ checks. It distinguishes implemented behavior from future work.
 [Cognito setup](docs/cognito-setup.md) describes the new authentication foundation:
 email sign-in, classic hosted UI with code + PKCE, a public client, application
 scope, and an unattached JWT authorizer. Existing API routes still use AWS_IAM.
-Browser login and Go membership/ownership enforcement are separate follow-ups;
+Go league reads now enforce JWT identity and membership. Browser login and
+organizer creation are separate follow-ups;
 creating a Cognito account alone must never grant access to league data.
 
 ## Repository structure
@@ -66,14 +67,28 @@ this application needs no C libraries. If your Go cache is read-only, set
 
 ## API contract and configuration
 
-`LEAGUES_TABLE_NAME` is required at startup. Terraform supplies the table name;
-AWS region and credentials follow the SDK's default configuration chain.
+`LEAGUES_TABLE_NAME` is required at startup. `MEMBERS_TABLE_NAME` configures
+membership reads; a missing value fails protected reads closed with 500. AWS region
+and credentials follow the SDK's default configuration chain.
+
+Deployment staging: the GET handler now requires verified JWT access-token context
+and a matching membership row. Terraform still configures AWS_IAM routes and does
+not yet supply MEMBERS_TABLE_NAME or membership read permissions. Do not deploy
+this intermediate artifact independently: finish organizer membership creation and
+the reviewed JWT/configuration/IAM transition first. IAM-only GET requests receive
+401 with this version, even when signed correctly. The curl GET example below is
+historical for the earlier IAM handler and will need Bearer-token replacement at
+that transition.
 
 - `POST /leagues` accepts `leagueId`, `name`, and `ownerId` strings. Values are
   trimmed and must be nonblank. Success is 201 with `{"leagueId":"weekend"}`;
   duplicate IDs return 409. Invalid JSON/base64 or missing fields return 400.
-- `GET /leagues/{leagueId}` returns 200 with `leagueId`, `name`, `ownerId`, and
-  a UTC RFC3339 `createdAt`; absent IDs return 404 and blank IDs return 400.
+- `GET /leagues/{leagueId}` requires JWT access-token identity (401 otherwise)
+  and membership (403 otherwise). Members receive 200 with `leagueId`, `name`,
+  `ownerId`, and UTC RFC3339 `createdAt`; missing leagues return 404 after the
+  membership check. Blank/overlong IDs return 400 after authentication.
+- Membership storage or decoding failures return generic 500 responses without
+  reading league data. All JSON responses include `Cache-Control: no-store`.
 - Service or item-decoding failures return generic 500 messages.
 
 Request validation (Phase 4 compatibility changes):
@@ -102,11 +117,15 @@ stored leagues are not rewritten; GET requests for pre-existing IDs longer than
 Successful response shapes, conditional-create conflicts, and consistent reads
 are unchanged.
 
-The current access policy is developer-only: IAM authorizes invocation, but
-`ownerId` remains client-supplied metadata, and any authorized caller can read a
-league by ID. It is not an ownership security boundary. Multiuser access or real
-personal data requires a separately defined authenticated-principal/user mapping
-and ownership enforcement; that feature is not implemented here.
+League reads use Cognito sub as the membership memberId and require a consistent
+read of the existing `(leagueId, memberId)` key. There is no ownerId or email bypass.
+League creation still trusts client-supplied ownerId; organizer-only creation and
+atomic organizer membership are the next task. No membership write/list endpoints
+exist yet. The app is not ready for multiuser exposure.
+
+No AWS services are added by membership lookup. Once deployed, an authorized league
+read adds one strongly consistent DynamoDB membership read, with corresponding
+on-demand read usage charges.
 
 For signed requests, set `API_URL` to the deployed stage URL, `AWS_REGION` to its
 region, and supply temporary credentials through your normal credential process.

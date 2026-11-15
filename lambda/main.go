@@ -18,6 +18,7 @@ type dynamoDB interface {
 type application struct {
 	db           dynamoDB
 	leaguesTable string
+	membersTable string
 }
 
 func main() {
@@ -34,6 +35,7 @@ func main() {
 	app := &application{
 		db:           dynamodb.NewFromConfig(cfg),
 		leaguesTable: tableName,
+		membersTable: os.Getenv("MEMBERS_TABLE_NAME"),
 	}
 
 	lambda.Start(app.route)

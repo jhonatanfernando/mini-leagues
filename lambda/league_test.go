@@ -118,7 +118,10 @@ func TestGetLeague(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			called := false
-			app := application{leaguesTable: "leagues", db: fakeDynamo{get: func(got context.Context, in *dynamodb.GetItemInput) (*dynamodb.GetItemOutput, error) {
+			app := application{leaguesTable: "leagues", membersTable: "members", db: fakeDynamo{get: func(got context.Context, in *dynamodb.GetItemInput) (*dynamodb.GetItemOutput, error) {
+				if aws.ToString(in.TableName) == "members" {
+					return &dynamodb.GetItemOutput{Item: membershipItem("L", "friend")}, nil
+				}
 				called = true
 				if got != ctx || aws.ToString(in.TableName) != "leagues" || !aws.ToBool(in.ConsistentRead) {
 					t.Fatalf("incorrect read options: %+v", in)
@@ -128,7 +131,7 @@ func TestGetLeague(t *testing.T) {
 				}
 				return &dynamodb.GetItemOutput{Item: tc.item}, tc.failure
 			}}}
-			resp, err := app.route(ctx, events.APIGatewayV2HTTPRequest{RouteKey: "GET /leagues/{leagueId}", PathParameters: map[string]string{"leagueId": " L "}})
+			resp, err := app.route(ctx, events.APIGatewayV2HTTPRequest{RouteKey: "GET /leagues/{leagueId}", RequestContext: events.APIGatewayV2HTTPRequestContext{Authorizer: jwtAuthorizer(map[string]string{"token_use": "access", "sub": "friend"})}, PathParameters: map[string]string{"leagueId": " L "}})
 			assertResponse(t, resp, err, tc.status, tc.body)
 			if !called {
 				t.Fatal("read not called")
@@ -137,14 +140,14 @@ func TestGetLeague(t *testing.T) {
 	}
 	for _, id := range []string{"", "  "} {
 		app := application{}
-		resp, err := app.getLeague(context.Background(), events.APIGatewayV2HTTPRequest{PathParameters: map[string]string{"leagueId": id}})
+		resp, err := app.getLeague(context.Background(), events.APIGatewayV2HTTPRequest{RequestContext: events.APIGatewayV2HTTPRequestContext{Authorizer: jwtAuthorizer(map[string]string{"token_use": "access", "sub": "friend"})}, PathParameters: map[string]string{"leagueId": id}})
 		assertResponse(t, resp, err, 400, `{"message":"leagueId is required"}`)
 	}
 }
 
 func assertResponse(t *testing.T, resp events.APIGatewayV2HTTPResponse, err error, status int, body string) {
 	t.Helper()
-	if err != nil || resp.StatusCode != status || resp.Body != body || resp.Headers["Content-Type"] != "application/json" || !json.Valid([]byte(resp.Body)) {
+	if err != nil || resp.StatusCode != status || resp.Body != body || resp.Headers["Content-Type"] != "application/json" || resp.Headers["Cache-Control"] != "no-store" || !json.Valid([]byte(resp.Body)) {
 		t.Fatalf("response = %+v, error = %v; want %d %s", resp, err, status, body)
 	}
 }
@@ -205,6 +208,6 @@ func TestCreateLeagueContract(t *testing.T) {
 
 func TestGetLeagueIdentifierLimit(t *testing.T) {
 	app := application{}
-	resp, err := app.getLeague(context.Background(), events.APIGatewayV2HTTPRequest{PathParameters: map[string]string{"leagueId": strings.Repeat("a", 129)}})
+	resp, err := app.getLeague(context.Background(), events.APIGatewayV2HTTPRequest{RequestContext: events.APIGatewayV2HTTPRequestContext{Authorizer: jwtAuthorizer(map[string]string{"token_use": "access", "sub": "friend"})}, PathParameters: map[string]string{"leagueId": strings.Repeat("a", 129)}})
 	assertResponse(t, resp, err, 400, `{"message":"leagueId must be at most 128 bytes"}`)
 }

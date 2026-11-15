@@ -97,10 +97,14 @@ league data. Never copy state or tokens into frontend configuration or chat.
 
 - Identity extraction is implemented/tested in `lambda/auth.go`: it requires
   access-token context and a valid nonblank sub and returns errUnauthenticated
-  on failure. Wire it into handlers and map failures to 401 with membership work.
+  on failure. GET league now maps this to 401 and requires membership; POST
+  remains pending organizer-only creation.
   The helper relies on gateway validation; it does not verify raw JWTs itself.
-- Add membership checks and organizer creation derived from `sub`; legacy client
-  ownerId cannot automatically become trusted ownership.
+- Membership checks are implemented for GET league. Add atomic organizer creation
+  derived from sub; legacy client ownerId cannot automatically become trusted
+  ownership. Before deployment wire MEMBERS_TABLE_NAME and only the required
+  membership actions into Lambda configuration/permissions alongside the JWT
+  route transition. Deploying this intermediate Go artifact alone breaks IAM GET.
 - Change existing routes to JWT and require `podium-picks/play` only after those
   checks pass. Review another authorized plan and separate apply.
 - Implement the browser login/callback/logout flow with PKCE and state checks,

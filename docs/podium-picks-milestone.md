@@ -15,15 +15,20 @@ Implemented in source:
   input limits, and JSON validation. `ownerId` is still client-supplied.
 - `lambda/prediction.go` and `scoring.go`: pure podium validation and non-stacking
   scoring; no prediction HTTP handlers or persistence yet.
-- `infra/dynamodb.tf`: league and membership tables; membership has no Go handlers.
+- `lambda/membership.go`: membership model and consistent-read access check.
+  GET league requires JWT identity and membership; POST is still the legacy flow.
+- `infra/dynamodb.tf`: league and membership tables; no membership write/list handlers.
 - `lambda/auth.go`: tested identity extraction from API Gateway JWT context;
   requires an access token and nonblank, unpadded sub. Returns a generic error
-  for handlers to map to 401; not yet wired into existing handlers.
+  mapped to 401 by GET league; POST wiring awaits organizer creation.
 - `infra/auth.tf`: Cognito and an unattached JWT authorizer prepared for review.
 - `web/`: buildable placeholder; no sign-in, callback, or API integration yet.
 
 Currently only POST /leagues and GET /leagues/{leagueId} are routed, both using
-AWS_IAM. They remain developer-only until authorization is implemented.
+AWS_IAM in Terraform. The GET Go handler now rejects IAM-only requests with 401.
+This is an intermediate source change: do not deploy before organizer creation
+and the JWT/configuration/permission transition. Membership uses MEMBERS_TABLE_NAME,
+which is not yet supplied by Terraform; missing configuration fails closed.
 
 ## Identity and access policy
 
@@ -183,7 +188,9 @@ intended identity scheme. No data migration is performed by this document.
    identity returns errUnauthenticated (handlers must map it to 401). Spoofed
    body/header/path/query IDs and IAM identity are ignored. Gateway remains
    responsible for signature, issuer, audience, expiry, and application scope.
-5. Membership lookup: nonmember → 403; AWS failure fails closed.
+5. Membership lookup: implemented/tested; consistent reads use (leagueId, sub),
+   nonmembers receive 403, malformed/storage failures return generic 500, and no
+   league read occurs before authorization. JSON responses use no-store.
 6. Atomic organizer creation: no client ownerId; duplicate/conflict/failure tests.
 7. JWT route transition: only after 4–6; test missing token, scope, and membership.
 8. Game table: additive keys/config/permissions, no replacement of old tables.

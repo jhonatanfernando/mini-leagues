@@ -13,7 +13,8 @@ func jsonResponse(status int, body any) events.APIGatewayV2HTTPResponse {
 			StatusCode: 500,
 			Body:       `{"message":"Unable to encode response"}`,
 			Headers: map[string]string{
-				"Content-Type": "application/json",
+				"Content-Type":  "application/json",
+				"Cache-Control": "no-store",
 			},
 		}
 	}
@@ -22,7 +23,8 @@ func jsonResponse(status int, body any) events.APIGatewayV2HTTPResponse {
 		StatusCode: status,
 		Body:       string(data),
 		Headers: map[string]string{
-			"Content-Type": "application/json",
+			"Content-Type":  "application/json",
+			"Cache-Control": "no-store",
 		},
 	}
 }
