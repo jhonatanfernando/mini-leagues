@@ -1,0 +1,123 @@
+# Cognito foundation for Podium Picks
+
+This change prepares Terraform configuration; it does not create users/resources,
+change current routes, or implement the browser login callback. See the
+[milestone contract](podium-picks-milestone.md) for the remaining authorization work.
+
+## What will be created
+
+`infra/auth.tf` adds five resources:
+
+1. `aws_cognito_user_pool.podium_picks`: email sign-in, email verification,
+   case-insensitive usernames, 12-character minimum passwords with upper/lowercase,
+   number and symbol requirements, verified-email recovery, deletion protection.
+2. `aws_cognito_resource_server.podium_picks`: application scope
+   `podium-picks/play`. This scope allows API access, not league membership.
+3. `aws_cognito_user_pool_client.web`: public/no secret; code grant only;
+   Cognito users only; access/ID tokens last 15 minutes, refresh tokens one day;
+   refresh-token rotation and token revocation enabled.
+4. `aws_cognito_user_pool_domain.podium_picks`: account/region/dev-qualified prefix
+   with classic hosted UI (version 1).
+5. `aws_apigatewayv2_authorizer.podium_picks`: JWT issuer and client audience,
+   reading the Authorization header; intentionally not attached to routes yet.
+
+The pool explicitly selects Lite rather than the default Essentials feature plan.
+Lite includes the classic hosted UI; it does not include the newer managed-login
+branding experience. No branding resource is necessary for version 1.
+See [AWS feature plans](https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-sign-in-feature-plans.html).
+
+Self-service account registration is enabled, but invitations will control league
+access in the application. MFA is OFF for this development milestone; mandatory
+TOTP and enrollment should be reviewed before wider use. No SMS, identity pool,
+custom domain/certificate, SES configuration, paid threat protection, or new
+Lambda IAM permissions are added. The built-in email sender is suitable only for
+small development use; review its delivery quotas before inviting the group.
+
+The browser must generate a fresh S256 PKCE challenge/verifier and OAuth state for
+each login. `allowed_oauth_flows = ["code"]` alone does not enforce client PKCE;
+that browser implementation is a required later task. Do not ship a flow without
+PKCE/state validation. Use an established OIDC library rather than custom token
+verification. Keep tokens in memory, never in localStorage; short-lived verifier/
+state may use sessionStorage and must be removed after callback validation. Avoid
+persisting refresh tokens for this milestone. Reload can sign in again through
+the Cognito browser session. Logout must clear app memory and visit the hosted
+logout endpoint; already issued access tokens can remain valid until expiry.
+
+## Local preparation and checks
+
+Use the current application root at `infra/`, region `us-east-2`, default workspace,
+and the reviewed account ID/backend settings. Do not recreate or migrate state.
+
+Optional values in ignored `infra/terraform.tfvars`:
+
+```hcl
+auth_callback_urls = ["http://localhost:5173/auth/callback"]
+auth_logout_urls   = ["http://localhost:5173/"]
+```
+
+URLs match exactly, including the trailing slash. The defaults use localhost;
+opening the app at 127.0.0.1 is not the same OAuth origin. Register exact HTTPS
+URLs once hosting exists; do not use wildcards. The variables reject non-HTTPS
+web destinations except localhost HTTP, fragments, and query strings. These
+settings register destinations only: `web/` has no callback implementation yet.
+Do not start real login until that task is implemented and tested.
+
+On an already initialized checkout, offline checks are:
+
+```bash
+terraform -chdir=infra fmt -check
+terraform -chdir=infra validate
+```
+
+Validation checks installed provider schemas, not live domain availability,
+account quotas, delivery, or login behavior. On a fresh checkout use the existing
+README/runbook initialization procedure; do not change backend authority to make
+validation pass.
+
+## Plan and deployment review (separate authorization required)
+
+Package the current Lambda artifact before planning. Use your intended AWS profile
+through the credential chain. With explicit task authorization, review an app-root
+Terraform plan. Expect five new auth resources and a public `web_auth` output.
+There may also be previously unapplied changes; review every difference. Stop on
+unexplained replacements/deletions. Existing table keys, Lambda names, backend,
+route authorization types, execution permissions, and inspector policy should not
+change because of this auth foundation.
+
+Obtain separate authorization after plan review before applying. Keep the plan
+and state private. Deletion protection blocks routine user-pool teardown; any
+future removal needs an explicit reviewed lifecycle decision.
+
+After an approved deployment, `web_auth` outputs the pool ID, client ID, issuer,
+domain, scopes, and registered URLs. These are public app configuration, not AWS
+credentials. The output is not a functioning login button or permission to access
+league data. Never copy state or tokens into frontend configuration or chat.
+
+## Required follow-up before friends use it
+
+- Identity extraction is implemented/tested in `lambda/auth.go`: it requires
+  access-token context and a valid nonblank sub and returns errUnauthenticated
+  on failure. Wire it into handlers and map failures to 401 with membership work.
+  The helper relies on gateway validation; it does not verify raw JWTs itself.
+- Add membership checks and organizer creation derived from `sub`; legacy client
+  ownerId cannot automatically become trusted ownership.
+- Change existing routes to JWT and require `podium-picks/play` only after those
+  checks pass. Review another authorized plan and separate apply.
+- Implement the browser login/callback/logout flow with PKCE and state checks,
+  explicit public configuration, and tests for invalid/replayed callbacks.
+- Add exact-origin API CORS and test the login flow only with live-test permission.
+
+Live acceptance, when separately authorized: email sign-up requires verification,
+code+PKCE exchange issues access tokens, ID tokens are not accepted by scoped API
+routes, expired/wrong-client tokens fail, missing scope fails, and valid signed-in
+nonmembers still receive 403 for league data. Before the JWT transition, current
+AWS_IAM routes will continue to reject browser Bearer tokens; this is expected.
+
+## Cost
+
+Cognito charges depend on monthly active users, feature plan, and enabled features.
+Lite is selected explicitly to keep this small password-based application simple.
+Free-tier eligibility is not guaranteed. Built-in email delivery has limits;
+separate SES or SMS delivery would introduce their own configuration and possible
+charges and is not included. Consult [current Cognito pricing](https://aws.amazon.com/cognito/pricing/)
+before approving deployment. This change adds no always-on compute or networking.

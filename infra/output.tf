@@ -9,3 +9,15 @@ output "mini_league_members_table_name" {
 output "create_league_url" {
   value = "${aws_apigatewayv2_stage.dev.invoke_url}/leagues"
 }
+output "web_auth" {
+  description = "Public browser authentication settings. No credentials or client secret."
+  value = {
+    user_pool_id  = aws_cognito_user_pool.podium_picks.id
+    client_id     = aws_cognito_user_pool_client.web.id
+    issuer        = "https://${aws_cognito_user_pool.podium_picks.endpoint}"
+    domain        = "https://${aws_cognito_user_pool_domain.podium_picks.domain}.auth.${var.region}.amazoncognito.com"
+    scopes        = ["openid", "email", "${aws_cognito_resource_server.podium_picks.identifier}/play"]
+    callback_urls = var.auth_callback_urls
+    logout_urls   = var.auth_logout_urls
+  }
+}

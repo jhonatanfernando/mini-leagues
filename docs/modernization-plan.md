@@ -2,6 +2,16 @@
 
 Status: implementation in progress, November 15, 2026.
 
+## Podium Picks application milestone
+
+The [playable milestone contract](podium-picks-milestone.md) now defines the game
+API, permissions, storage, and acceptance gates. Pure podium validation/scoring
+and the web scaffold exist. [Cognito foundation](cognito-setup.md) is prepared in
+Terraform; it is not deployed or attached to the existing AWS_IAM routes. Go
+identity extraction is implemented and tested but not wired to handlers yet.
+Membership/organizer enforcement and browser login remain follow-ups.
+This feature work does not mark outstanding operational phases complete.
+
 ## Progress audit (source only)
 
 - Phase 1 implemented: small DynamoDB interface, offline handler/router/response

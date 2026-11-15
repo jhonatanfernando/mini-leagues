@@ -95,3 +95,29 @@ variable "api_throttling_rate_limit" {
     error_message = "api_throttling_rate_limit must be positive."
   }
 }
+
+variable "auth_callback_urls" {
+  description = "Exact web OAuth callback URLs; HTTPS or localhost HTTP only. No wildcards, query strings, or fragments."
+  type        = list(string)
+  default     = ["http://localhost:5173/auth/callback"]
+
+  validation {
+    condition = length(var.auth_callback_urls) > 0 && alltrue([
+      for url in var.auth_callback_urls : can(regex("^(https://[a-zA-Z0-9.-]+(:[0-9]+)?|http://localhost(:[0-9]+)?)(/[^?#*]*)?$", url))
+    ])
+    error_message = "Provide at least one exact HTTPS or http://localhost callback URL without wildcards, queries, or fragments."
+  }
+}
+
+variable "auth_logout_urls" {
+  description = "Exact post-logout web URLs; HTTPS or localhost HTTP only."
+  type        = list(string)
+  default     = ["http://localhost:5173/"]
+
+  validation {
+    condition = length(var.auth_logout_urls) > 0 && alltrue([
+      for url in var.auth_logout_urls : can(regex("^(https://[a-zA-Z0-9.-]+(:[0-9]+)?|http://localhost(:[0-9]+)?)(/[^?#*]*)?$", url))
+    ])
+    error_message = "Provide at least one exact HTTPS or http://localhost logout URL without wildcards, queries, or fragments."
+  }
+}

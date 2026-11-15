@@ -3,6 +3,18 @@
 A learning project using Go Lambda, API Gateway HTTP API, DynamoDB, and Terraform.
 The API creates and retrieves leagues; both routes require AWS IAM authorization.
 
+## Podium Picks milestone and sign-in
+
+The [milestone contract](docs/podium-picks-milestone.md) defines target endpoints,
+permissions, DynamoDB access patterns, deadline/privacy rules, and acceptance
+checks. It distinguishes implemented behavior from future work.
+
+[Cognito setup](docs/cognito-setup.md) describes the new authentication foundation:
+email sign-in, classic hosted UI with code + PKCE, a public client, application
+scope, and an unattached JWT authorizer. Existing API routes still use AWS_IAM.
+Browser login and Go membership/ownership enforcement are separate follow-ups;
+creating a Cognito account alone must never grant access to league data.
+
 ## Repository structure
 
 ```text
