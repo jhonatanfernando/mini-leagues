@@ -1,7 +1,8 @@
 # Cognito foundation for Podium Picks
 
-This change prepares Terraform configuration; it does not create users/resources,
-change current routes, or implement the browser login callback. See the
+The Cognito foundation is deployed with refresh-token rotation disabled for Lite.
+The JWT route, membership configuration, and permission transition was applied;
+a follow-up plan found no changes. The browser login callback is not implemented. See the
 [milestone contract](podium-picks-milestone.md) for the remaining authorization work.
 
 ## What will be created
@@ -15,15 +16,17 @@ change current routes, or implement the browser login callback. See the
    `podium-picks/play`. This scope allows API access, not league membership.
 3. `aws_cognito_user_pool_client.web`: public/no secret; code grant only;
    Cognito users only; access/ID tokens last 15 minutes, refresh tokens one day;
-   refresh-token rotation and token revocation enabled.
+   refresh-token rotation disabled and token revocation enabled.
 4. `aws_cognito_user_pool_domain.podium_picks`: account/region/dev-qualified prefix
    with classic hosted UI (version 1).
 5. `aws_apigatewayv2_authorizer.podium_picks`: JWT issuer and client audience,
-   reading the Authorization header; intentionally not attached to routes yet.
+   reading the Authorization header; attached to the league routes.
 
 The pool explicitly selects Lite rather than the default Essentials feature plan.
 Lite includes the classic hosted UI; it does not include the newer managed-login
-branding experience. No branding resource is necessary for version 1.
+branding experience. No branding resource is necessary for version 1. Without rotation, a refresh
+token remains reusable until expiration or revocation; keep it in memory and
+retain the one-day lifetime.
 See [AWS feature plans](https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-sign-in-feature-plans.html).
 
 Self-service account registration is enabled, but invitations will control league
@@ -78,11 +81,11 @@ validation pass.
 
 Package the current Lambda artifact before planning. Use your intended AWS profile
 through the credential chain. With explicit task authorization, review an app-root
-Terraform plan. Expect five new auth resources and a public `web_auth` output.
+Terraform plan. Review the route and Lambda changes alongside the public `web_auth` output.
 There may also be previously unapplied changes; review every difference. Stop on
-unexplained replacements/deletions. Existing table keys, Lambda names, backend,
-route authorization types, execution permissions, and inspector policy should not
-change because of this auth foundation.
+unexplained replacements/deletions. Existing table keys, Lambda names, backend, and inspector policy should not
+change. The route authorizers, Lambda environment, and execution permissions
+change as part of the prepared transition.
 
 Obtain separate authorization after plan review before applying. Keep the plan
 and state private. Deletion protection blocks routine user-pool teardown; any
@@ -97,16 +100,15 @@ league data. Never copy state or tokens into frontend configuration or chat.
 
 - Identity extraction is implemented/tested in `lambda/auth.go`: it requires
   access-token context and a valid nonblank sub and returns errUnauthenticated
-  on failure. GET league now maps this to 401 and requires membership; POST
-  remains pending organizer-only creation.
+  on failure. Both league handlers map this to 401; GET requires membership and
+  POST requires the configured initial organizer.
   The helper relies on gateway validation; it does not verify raw JWTs itself.
-- Membership checks are implemented for GET league. Add atomic organizer creation
-  derived from sub; legacy client ownerId cannot automatically become trusted
-  ownership. Before deployment wire MEMBERS_TABLE_NAME and only the required
-  membership actions into Lambda configuration/permissions alongside the JWT
-  route transition. Deploying this intermediate Go artifact alone breaks IAM GET.
-- Change existing routes to JWT and require `podium-picks/play` only after those
-  checks pass. Review another authorized plan and separate apply.
+- Membership checks and atomic organizer creation are implemented. Legacy client
+  ownerId cannot automatically become trusted ownership. The table and permission
+  wiring has been applied. After the organizer registers and verifies email,
+  configure their exact Cognito sub; empty keeps creation disabled.
+- Verify the deployed JWT routes and required `podium-picks/play` scope with
+  live requests only after obtaining explicit live-test authorization.
 - Implement the browser login/callback/logout flow with PKCE and state checks,
   explicit public configuration, and tests for invalid/replayed callbacks.
 - Add exact-origin API CORS and test the login flow only with live-test permission.
@@ -114,8 +116,7 @@ league data. Never copy state or tokens into frontend configuration or chat.
 Live acceptance, when separately authorized: email sign-up requires verification,
 code+PKCE exchange issues access tokens, ID tokens are not accepted by scoped API
 routes, expired/wrong-client tokens fail, missing scope fails, and valid signed-in
-nonmembers still receive 403 for league data. Before the JWT transition, current
-AWS_IAM routes will continue to reject browser Bearer tokens; this is expected.
+nonmembers still receive 403 for league data. The deployed routes now require JWT access tokens and the play scope.
 
 ## Cost
 

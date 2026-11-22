@@ -11,14 +11,15 @@ import (
 )
 
 type dynamoDB interface {
-	PutItem(context.Context, *dynamodb.PutItemInput, ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error)
+	TransactWriteItems(context.Context, *dynamodb.TransactWriteItemsInput, ...func(*dynamodb.Options)) (*dynamodb.TransactWriteItemsOutput, error)
 	GetItem(context.Context, *dynamodb.GetItemInput, ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error)
 }
 
 type application struct {
-	db           dynamoDB
-	leaguesTable string
-	membersTable string
+	db                 dynamoDB
+	leaguesTable       string
+	membersTable       string
+	initialOrganizerID string
 }
 
 func main() {
@@ -33,9 +34,10 @@ func main() {
 	}
 
 	app := &application{
-		db:           dynamodb.NewFromConfig(cfg),
-		leaguesTable: tableName,
-		membersTable: os.Getenv("MEMBERS_TABLE_NAME"),
+		db:                 dynamodb.NewFromConfig(cfg),
+		leaguesTable:       tableName,
+		membersTable:       os.Getenv("MEMBERS_TABLE_NAME"),
+		initialOrganizerID: os.Getenv("INITIAL_ORGANIZER_SUB"),
 	}
 
 	lambda.Start(app.route)

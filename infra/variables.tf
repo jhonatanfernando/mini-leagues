@@ -121,3 +121,14 @@ variable "auth_logout_urls" {
     error_message = "Provide at least one exact HTTPS or http://localhost logout URL without wildcards, queries, or fragments."
   }
 }
+
+variable "initial_organizer_sub" {
+  description = "Cognito sub allowed to create leagues; empty disables creation until configured."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.initial_organizer_sub == trimspace(var.initial_organizer_sub)
+    error_message = "initial_organizer_sub must not have surrounding whitespace."
+  }
+}

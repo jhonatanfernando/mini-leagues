@@ -11,24 +11,23 @@ The browser is the TypeScript/Vite app in `web/`; static hosting is a later task
 
 Implemented in source:
 
-- `lambda/league.go`: create/get leagues, conditional creates, consistent reads,
-  input limits, and JSON validation. `ownerId` is still client-supplied.
+- `lambda/league.go`: authenticated organizer creates a league and membership in
+  one conditional transaction; GET uses consistent reads and membership checks.
 - `lambda/prediction.go` and `scoring.go`: pure podium validation and non-stacking
   scoring; no prediction HTTP handlers or persistence yet.
 - `lambda/membership.go`: membership model and consistent-read access check.
-  GET league requires JWT identity and membership; POST is still the legacy flow.
+  GET league requires JWT identity and membership.
 - `infra/dynamodb.tf`: league and membership tables; no membership write/list handlers.
 - `lambda/auth.go`: tested identity extraction from API Gateway JWT context;
   requires an access token and nonblank, unpadded sub. Returns a generic error
-  mapped to 401 by GET league; POST wiring awaits organizer creation.
-- `infra/auth.tf`: Cognito and an unattached JWT authorizer prepared for review.
+  mapped to 401 by both league handlers.
+- `infra/auth.tf`: Cognito and a JWT authorizer attached to the league routes.
 - `web/`: buildable placeholder; no sign-in, callback, or API integration yet.
 
-Currently only POST /leagues and GET /leagues/{leagueId} are routed, both using
-AWS_IAM in Terraform. The GET Go handler now rejects IAM-only requests with 401.
-This is an intermediate source change: do not deploy before organizer creation
-and the JWT/configuration/permission transition. Membership uses MEMBERS_TABLE_NAME,
-which is not yet supplied by Terraform; missing configuration fails closed.
+Only POST /leagues and GET /leagues/{leagueId} are routed. JWT authorization and
+membership permissions have been applied; a follow-up plan found no changes.
+Live authorization tests remain outstanding. With an empty initial organizer
+sub, creation fails closed until a verified organizer account is configured.
 
 ## Identity and access policy
 
@@ -191,8 +190,11 @@ intended identity scheme. No data migration is performed by this document.
 5. Membership lookup: implemented/tested; consistent reads use (leagueId, sub),
    nonmembers receive 403, malformed/storage failures return generic 500, and no
    league read occurs before authorization. JSON responses use no-store.
-6. Atomic organizer creation: no client ownerId; duplicate/conflict/failure tests.
-7. JWT route transition: only after 4–6; test missing token, scope, and membership.
+6. Atomic organizer creation: implemented; JWT organizer identity, conditional
+   transaction, duplicate/conflict/failure tests. Configuration wiring follows.
+7. JWT route transition: applied; mocked configuration tests pass and a follow-up
+   plan found no changes. Test tokens and membership only with explicit live-test
+   authorization.
 8. Game table: additive keys/config/permissions, no replacement of old tables.
 9. Invitation creation: organizer only; raw token never stored/logged.
 10. Redemption/members: atomic consume, expiry, replay, pagination tests.

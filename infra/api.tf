@@ -15,9 +15,11 @@ resource "aws_apigatewayv2_integration" "create_league" {
 resource "aws_apigatewayv2_route" "create_league" {
   api_id = aws_apigatewayv2_api.mini_leagues.id
 
-  route_key          = "POST /leagues"
-  target             = "integrations/${aws_apigatewayv2_integration.create_league.id}"
-  authorization_type = "AWS_IAM"
+  route_key            = "POST /leagues"
+  target               = "integrations/${aws_apigatewayv2_integration.create_league.id}"
+  authorization_type   = "JWT"
+  authorizer_id        = aws_apigatewayv2_authorizer.podium_picks.id
+  authorization_scopes = ["${aws_cognito_resource_server.podium_picks.identifier}/play"]
 }
 
 resource "aws_apigatewayv2_stage" "dev" {
@@ -43,9 +45,11 @@ resource "aws_lambda_permission" "api_gateway" {
 resource "aws_apigatewayv2_route" "get_league" {
   api_id = aws_apigatewayv2_api.mini_leagues.id
 
-  route_key          = "GET /leagues/{leagueId}"
-  target             = "integrations/${aws_apigatewayv2_integration.create_league.id}"
-  authorization_type = "AWS_IAM"
+  route_key            = "GET /leagues/{leagueId}"
+  target               = "integrations/${aws_apigatewayv2_integration.create_league.id}"
+  authorization_type   = "JWT"
+  authorizer_id        = aws_apigatewayv2_authorizer.podium_picks.id
+  authorization_scopes = ["${aws_cognito_resource_server.podium_picks.identifier}/play"]
 }
 
 resource "aws_lambda_permission" "api_gateway_get_league" {

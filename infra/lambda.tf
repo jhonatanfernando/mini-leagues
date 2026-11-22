@@ -31,6 +31,14 @@ resource "aws_iam_role_policy" "create_league" {
       {
         Effect = "Allow"
         Action = [
+          "dynamodb:PutItem",
+          "dynamodb:GetItem"
+        ]
+        Resource = aws_dynamodb_table.mini_league_members.arn
+      },
+      {
+        Effect = "Allow"
+        Action = [
           "logs:CreateLogStream",
           "logs:PutLogEvents"
         ]
@@ -61,7 +69,9 @@ resource "aws_lambda_function" "create_league" {
 
   environment {
     variables = {
-      LEAGUES_TABLE_NAME = aws_dynamodb_table.mini_leagues.name
+      LEAGUES_TABLE_NAME    = aws_dynamodb_table.mini_leagues.name
+      MEMBERS_TABLE_NAME    = aws_dynamodb_table.mini_league_members.name
+      INITIAL_ORGANIZER_SUB = var.initial_organizer_sub
     }
   }
 

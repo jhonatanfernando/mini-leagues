@@ -14,3 +14,7 @@ api_throttling_rate_limit  = 2
 # These register destinations only; the web callback is a future implementation.
 auth_callback_urls = ["http://localhost:5173/auth/callback"]
 auth_logout_urls   = ["http://localhost:5173/"]
+
+# After registering and verifying the organizer in this user pool, set its exact
+# Cognito sub. Empty keeps league creation disabled until a reviewed update.
+initial_organizer_sub = ""

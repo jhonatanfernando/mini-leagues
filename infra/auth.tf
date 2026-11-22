@@ -1,5 +1,4 @@
-# Authentication foundation only. Existing application routes stay AWS_IAM until
-# Go handlers enforce membership and organizer permissions (see the milestone).
+# Cognito authentication foundation and JWT authorizer for the league routes.
 resource "aws_cognito_user_pool" "podium_picks" {
   name                     = "podium-picks-${var.environment}"
   user_pool_tier           = "LITE"
@@ -74,8 +73,8 @@ resource "aws_cognito_user_pool_client" "web" {
   enable_token_revocation                       = true
   enable_propagate_additional_user_context_data = false
 
-  # Set explicitly to avoid the default refresh-token auth flow, which is
-  # incompatible with rotation. Browser login will use OAuth code + S256 PKCE.
+  # Browser login will use OAuth code + S256 PKCE; refresh-token rotation
+  # is unavailable with the selected Lite tier.
   explicit_auth_flows = ["ALLOW_USER_SRP_AUTH"]
   read_attributes     = ["email", "email_verified", "sub"]
   write_attributes    = ["email"]
@@ -90,10 +89,6 @@ resource "aws_cognito_user_pool_client" "web" {
     refresh_token = "days"
   }
 
-  refresh_token_rotation {
-    feature                    = "ENABLED"
-    retry_grace_period_seconds = 10
-  }
 }
 
 resource "aws_cognito_user_pool_domain" "podium_picks" {
@@ -102,7 +97,7 @@ resource "aws_cognito_user_pool_domain" "podium_picks" {
   managed_login_version = 1 # Classic hosted UI is available with Lite.
 }
 
-# Intentionally unattached until the handler authorization work is complete.
+# Both league routes use this authorizer and require the application play scope.
 resource "aws_apigatewayv2_authorizer" "podium_picks" {
   api_id           = aws_apigatewayv2_api.mini_leagues.id
   name             = "podium-picks-users"

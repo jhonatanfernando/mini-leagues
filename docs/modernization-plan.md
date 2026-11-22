@@ -6,13 +6,11 @@ Status: implementation in progress, November 15, 2026.
 
 The [playable milestone contract](podium-picks-milestone.md) now defines the game
 API, permissions, storage, and acceptance gates. Pure podium validation/scoring
-and the web scaffold exist. [Cognito foundation](cognito-setup.md) is prepared in
-Terraform; it is not deployed or attached to the existing AWS_IAM routes. Go
-identity extraction and membership checks now protect GET league in source.
-Organizer creation, MEMBERS_TABLE_NAME/permission wiring, JWT route transition,
-and browser login remain follow-ups. Do not deploy the intermediate handler on
-its own: current Terraform still authorizes routes with AWS_IAM.
-This feature work does not mark outstanding operational phases complete.
+and the web scaffold exist. [Cognito foundation](cognito-setup.md) is deployed. The Go handlers require JWT
+identity, membership for reads, and a configured organizer for creation. Terraform
+JWT routes, membership configuration, and scoped permissions have been applied;
+a follow-up plan found no changes. Live authorization tests remain outstanding.
+The browser login remains a follow-up. This feature work does not mark outstanding operational phases complete.
 
 ## Progress audit (source only)
 

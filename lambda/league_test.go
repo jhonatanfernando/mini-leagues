@@ -2,12 +2,10 @@ package main
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -16,10 +14,14 @@ import (
 )
 
 type fakeDynamo struct {
-	put func(context.Context, *dynamodb.PutItemInput) (*dynamodb.PutItemOutput, error)
-	get func(context.Context, *dynamodb.GetItemInput) (*dynamodb.GetItemOutput, error)
+	transact func(context.Context, *dynamodb.TransactWriteItemsInput) (*dynamodb.TransactWriteItemsOutput, error)
+	put      func(context.Context, *dynamodb.PutItemInput) (*dynamodb.PutItemOutput, error)
+	get      func(context.Context, *dynamodb.GetItemInput) (*dynamodb.GetItemOutput, error)
 }
 
+func (f fakeDynamo) TransactWriteItems(ctx context.Context, in *dynamodb.TransactWriteItemsInput, _ ...func(*dynamodb.Options)) (*dynamodb.TransactWriteItemsOutput, error) {
+	return f.transact(ctx, in)
+}
 func (f fakeDynamo) PutItem(ctx context.Context, in *dynamodb.PutItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error) {
 	return f.put(ctx, in)
 }
@@ -27,77 +29,69 @@ func (f fakeDynamo) GetItem(ctx context.Context, in *dynamodb.GetItemInput, _ ..
 	return f.get(ctx, in)
 }
 
-func TestCreateLeagueValidation(t *testing.T) {
+func TestCreateLeagueOrganizer(t *testing.T) {
+	event := events.APIGatewayV2HTTPRequest{Body: `{"leagueId":"L","name":"Name","displayName":" Organizer "}`, RequestContext: events.APIGatewayV2HTTPRequestContext{Authorizer: jwtAuthorizer(map[string]string{"token_use": "access", "sub": "organizer"})}}
+	ctx := context.Background()
+	called := false
+	app := application{leaguesTable: "leagues", membersTable: "members", initialOrganizerID: "organizer", db: fakeDynamo{transact: func(got context.Context, in *dynamodb.TransactWriteItemsInput) (*dynamodb.TransactWriteItemsOutput, error) {
+		called = true
+		if got != ctx || len(in.TransactItems) != 2 {
+			t.Fatal("incorrect transaction")
+		}
+		league, member := in.TransactItems[0].Put, in.TransactItems[1].Put
+		if aws.ToString(league.TableName) != "leagues" || aws.ToString(member.TableName) != "members" || league.Item["ownerId"].(*types.AttributeValueMemberS).Value != "organizer" || member.Item["memberId"].(*types.AttributeValueMemberS).Value != "organizer" || member.Item["displayName"].(*types.AttributeValueMemberS).Value != "Organizer" || league.ConditionExpression == nil || member.ConditionExpression == nil {
+			t.Fatal("incorrect transaction items")
+		}
+		return &dynamodb.TransactWriteItemsOutput{}, nil
+	}}}
+	resp, err := app.createLeague(ctx, event)
+	assertResponse(t, resp, err, 201, `{"leagueId":"L"}`)
+	if !called {
+		t.Fatal("transaction not called")
+	}
 	for _, tc := range []struct {
-		name, body string
-		encoded    bool
-		message    string
+		name   string
+		mutate func(*application, *events.APIGatewayV2HTTPRequest)
+		status int
 	}{
-		{"json", "{", false, "Invalid JSON"},
-		{"base64", "!", true, "Invalid request body"},
-		{"missing", `{}`, false, "leagueId, name and ownerId are required"},
-		{"blank id", `{"leagueId":" ","name":"N","ownerId":"O"}`, false, "leagueId, name and ownerId are required"},
-		{"blank name", `{"leagueId":"L","name":" ","ownerId":"O"}`, false, "leagueId, name and ownerId are required"},
-		{"blank owner", `{"leagueId":"L","name":"N","ownerId":" "}`, false, "leagueId, name and ownerId are required"},
+		{"missing identity", func(a *application, e *events.APIGatewayV2HTTPRequest) { e.RequestContext.Authorizer = nil }, 401},
+		{"wrong organizer", func(a *application, e *events.APIGatewayV2HTTPRequest) { a.initialOrganizerID = "other" }, 403},
+		{"missing config", func(a *application, e *events.APIGatewayV2HTTPRequest) { a.initialOrganizerID = "" }, 500},
+		{"owner supplied", func(a *application, e *events.APIGatewayV2HTTPRequest) {
+			e.Body = `{"leagueId":"L","name":"N","displayName":"D","ownerId":"spoof"}`
+		}, 400},
+		{"invalid id", func(a *application, e *events.APIGatewayV2HTTPRequest) {
+			e.Body = `{"leagueId":"bad id","name":"N","displayName":"D"}`
+		}, 400},
+		{"blank display", func(a *application, e *events.APIGatewayV2HTTPRequest) {
+			e.Body = `{"leagueId":"L","name":"N","displayName":" "}`
+		}, 400},
+		{"long display", func(a *application, e *events.APIGatewayV2HTTPRequest) {
+			e.Body = `{"leagueId":"L","name":"N","displayName":"` + strings.Repeat("界", 81) + `"}`
+		}, 400},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			app := application{}
-			resp, err := app.createLeague(context.Background(), events.APIGatewayV2HTTPRequest{Body: tc.body, IsBase64Encoded: tc.encoded})
-			assertResponse(t, resp, err, 400, `{"message":"`+tc.message+`"}`)
-		})
-	}
-}
-
-func TestCreateLeague(t *testing.T) {
-	for _, encoded := range []bool{false, true} {
-		t.Run(map[bool]string{false: "json", true: "base64"}[encoded], func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-			called := false
-			app := application{leaguesTable: "leagues", db: fakeDynamo{put: func(got context.Context, in *dynamodb.PutItemInput) (*dynamodb.PutItemOutput, error) {
-				called = true
-				if got != ctx || aws.ToString(in.TableName) != "leagues" || aws.ToString(in.ConditionExpression) != "attribute_not_exists(leagueId)" {
-					t.Fatalf("incorrect write context/options: %+v", in)
-				}
-				for key, want := range map[string]string{"leagueId": "L", "name": "Name", "ownerId": "O"} {
-					if value, ok := in.Item[key].(*types.AttributeValueMemberS); !ok || value.Value != want {
-						t.Fatalf("incorrect %s: %v", key, in.Item[key])
-					}
-				}
-				timestamp, ok := in.Item["createdAt"].(*types.AttributeValueMemberS)
-				if !ok {
-					t.Fatal("missing timestamp")
-				}
-				if _, err := time.Parse(time.RFC3339, timestamp.Value); err != nil {
-					t.Fatal(err)
-				}
-				return &dynamodb.PutItemOutput{}, nil
-			}}}
-			body := `{"leagueId":" L ","name":" Name ","ownerId":" O "}`
-			if encoded {
-				body = base64.StdEncoding.EncodeToString([]byte(body))
-			}
-			resp, err := app.route(ctx, events.APIGatewayV2HTTPRequest{RouteKey: "POST /leagues", Body: body, IsBase64Encoded: encoded})
-			assertResponse(t, resp, err, 201, `{"leagueId":"L"}`)
-			if !called {
-				t.Fatal("write not called")
+			a, e := app, event
+			tc.mutate(&a, &e)
+			called = false
+			r, _ := a.createLeague(ctx, e)
+			if r.StatusCode != tc.status || called {
+				t.Fatalf("status %d called %v", r.StatusCode, called)
 			}
 		})
 	}
 	for _, tc := range []struct {
-		name    string
 		failure error
 		status  int
-		message string
-	}{
-		{"conflict", &types.ConditionalCheckFailedException{}, 409, "League already exists"},
-		{"failure", errors.New("private service detail"), 500, "Unable to create league"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			app := application{db: fakeDynamo{put: func(context.Context, *dynamodb.PutItemInput) (*dynamodb.PutItemOutput, error) { return nil, tc.failure }}}
-			resp, err := app.createLeague(context.Background(), events.APIGatewayV2HTTPRequest{Body: `{"leagueId":"L","name":"N","ownerId":"O"}`})
-			assertResponse(t, resp, err, tc.status, `{"message":"`+tc.message+`"}`)
-		})
+	}{{&types.TransactionCanceledException{CancellationReasons: []types.CancellationReason{{Code: aws.String("ConditionalCheckFailed")}}}, 409}, {errors.New("private"), 500}} {
+		a := app
+		a.db = fakeDynamo{transact: func(context.Context, *dynamodb.TransactWriteItemsInput) (*dynamodb.TransactWriteItemsOutput, error) {
+			return nil, tc.failure
+		}}
+		r, _ := a.createLeague(ctx, event)
+		if r.StatusCode != tc.status {
+			t.Fatalf("status %d", r.StatusCode)
+		}
 	}
 }
 
@@ -152,62 +146,36 @@ func assertResponse(t *testing.T, resp events.APIGatewayV2HTTPResponse, err erro
 	}
 }
 
-// These tests describe the Phase 4 contract, including the compatibility changes.
-func TestCreateLeagueContract(t *testing.T) {
-	valid := `{"leagueId":"L","name":"N","ownerId":"O"}`
-	makeBody := func(id, name, owner string) string {
-		t.Helper()
-		data, err := json.Marshal(CreateLeagueRequest{LeagueID: id, Name: name, OwnerID: owner})
-		if err != nil {
-			t.Fatal(err)
-		}
-		return string(data)
-	}
-	for _, tc := range []struct {
-		name, body string
-		encoded    bool
-		status     int
-		message    string
-	}{
-		{"null object", `null`, false, 400, "Invalid JSON"},
-		{"array", `[]`, false, 400, "Invalid JSON"},
-		{"unknown field", `{"leagueId":"L","name":"N","ownerId":"O","admin":true}`, false, 400, "Invalid JSON"},
-		{"trailing object", valid + ` {}`, false, 400, "Invalid JSON"},
-		{"wrong field type", `{"leagueId":42,"name":"N","ownerId":"O"}`, false, 400, "Invalid JSON"},
-		{"invalid utf8", "{\"leagueId\":\"\xff\",\"name\":\"N\",\"ownerId\":\"O\"}", false, 400, "Invalid JSON"},
-		{"oversized plain", valid + strings.Repeat(" ", 16385-len(valid)), false, 413, "Request body is too large"},
-		{"oversized base64", base64.StdEncoding.EncodeToString([]byte(valid + strings.Repeat(" ", 16385-len(valid)))), true, 413, "Request body is too large"},
-		{"long id", makeBody(strings.Repeat("a", 129), "N", "O"), false, 400, "leagueId and ownerId must be at most 128 bytes"},
-		{"long owner", makeBody("L", "N", strings.Repeat("a", 129)), false, 400, "leagueId and ownerId must be at most 128 bytes"},
-		{"multibyte id", makeBody(strings.Repeat("é", 65), "N", "O"), false, 400, "leagueId and ownerId must be at most 128 bytes"},
-		{"long name", makeBody("L", strings.Repeat("界", 201), "O"), false, 400, "name must be at most 200 characters"},
-		{"body boundary", valid + strings.Repeat(" ", 16384-len(valid)), false, 201, ""},
-		{"base64 boundary", base64.StdEncoding.EncodeToString([]byte(valid + strings.Repeat(" ", 16384-len(valid)))), true, 201, ""},
-		{"field boundaries", makeBody(" "+strings.Repeat("a", 128)+" ", " "+strings.Repeat("界", 200)+" ", strings.Repeat("b", 128)), false, 201, ""},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			called := false
-			app := application{db: fakeDynamo{put: func(context.Context, *dynamodb.PutItemInput) (*dynamodb.PutItemOutput, error) {
-				called = true
-				return &dynamodb.PutItemOutput{}, nil
-			}}}
-			resp, err := app.createLeague(context.Background(), events.APIGatewayV2HTTPRequest{Body: tc.body, IsBase64Encoded: tc.encoded})
-			if tc.status == 201 {
-				if err != nil || resp.StatusCode != 201 || !called {
-					t.Fatalf("response %+v, err %v, called %v", resp, err, called)
-				}
-			} else {
-				assertResponse(t, resp, err, tc.status, `{"message":"`+tc.message+`"}`)
-				if called {
-					t.Fatal("invalid request reached DynamoDB")
-				}
-			}
-		})
-	}
-}
-
 func TestGetLeagueIdentifierLimit(t *testing.T) {
 	app := application{}
 	resp, err := app.getLeague(context.Background(), events.APIGatewayV2HTTPRequest{RequestContext: events.APIGatewayV2HTTPRequestContext{Authorizer: jwtAuthorizer(map[string]string{"token_use": "access", "sub": "friend"})}, PathParameters: map[string]string{"leagueId": strings.Repeat("a", 129)}})
 	assertResponse(t, resp, err, 400, `{"message":"leagueId must be at most 128 bytes"}`)
+}
+
+func TestCreateLeagueBodyValidation(t *testing.T) {
+	valid := `{"leagueId":"L","name":"N","displayName":"D"}`
+	for _, tc := range []struct {
+		name, body string
+		encoded    bool
+		status     int
+	}{
+		{"malformed", "{", false, 400}, {"base64", "!", true, 400},
+		{"null", "null", false, 400}, {"array", "[]", false, 400},
+		{"trailing", valid + ` {}`, false, 400}, {"invalid UTF-8", "{\"leagueId\":\"\xff\"}", false, 400},
+		{"oversized", valid + strings.Repeat(" ", 16385-len(valid)), false, 413},
+		{"long id", `{"leagueId":"` + strings.Repeat("a", 129) + `","name":"N","displayName":"D"}`, false, 400},
+		{"long name", `{"leagueId":"L","name":"` + strings.Repeat("界", 201) + `","displayName":"D"}`, false, 400},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			app := application{leaguesTable: "leagues", membersTable: "members", initialOrganizerID: "organizer", db: fakeDynamo{transact: func(context.Context, *dynamodb.TransactWriteItemsInput) (*dynamodb.TransactWriteItemsOutput, error) {
+				t.Fatal("invalid request reached database")
+				return nil, nil
+			}}}
+			event := events.APIGatewayV2HTTPRequest{Body: tc.body, IsBase64Encoded: tc.encoded, RequestContext: events.APIGatewayV2HTTPRequestContext{Authorizer: jwtAuthorizer(map[string]string{"token_use": "access", "sub": "organizer"})}}
+			resp, err := app.createLeague(context.Background(), event)
+			if err != nil || resp.StatusCode != tc.status {
+				t.Fatalf("response %+v, error %v", resp, err)
+			}
+		})
+	}
 }

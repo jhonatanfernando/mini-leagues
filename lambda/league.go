@@ -35,9 +35,9 @@ type League struct {
 }
 
 type CreateLeagueRequest struct {
-	LeagueID string `json:"leagueId"`
-	Name     string `json:"name"`
-	OwnerID  string `json:"ownerId"`
+	LeagueID    string `json:"leagueId"`
+	Name        string `json:"name"`
+	DisplayName string `json:"displayName"`
 }
 
 type CreateLeagueResponse struct {
@@ -45,6 +45,16 @@ type CreateLeagueResponse struct {
 }
 
 func (app *application) createLeague(ctx context.Context, event events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
+	memberID, err := authenticatedUserID(event)
+	if err != nil {
+		return jsonResponse(401, map[string]string{"message": "Unauthorized"}), nil
+	}
+	if app.initialOrganizerID == "" || app.membersTable == "" || app.leaguesTable == "" {
+		return jsonResponse(500, map[string]string{"message": "Unable to create league"}), nil
+	}
+	if memberID != app.initialOrganizerID {
+		return jsonResponse(403, map[string]string{"message": "Forbidden"}), nil
+	}
 	// Bound the encoded representation too, before allocating a decoded buffer.
 	bodyLimit := maxLeagueBodyBytes
 	if event.IsBase64Encoded {
@@ -74,7 +84,7 @@ func (app *application) createLeague(ctx context.Context, event events.APIGatewa
 	var request *CreateLeagueRequest
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	decoder.DisallowUnknownFields()
-	err := decoder.Decode(&request)
+	err = decoder.Decode(&request)
 	if err != nil || request == nil || !utf8.Valid(body) {
 		return jsonResponse(400, map[string]string{
 			"message": "Invalid JSON",
@@ -85,56 +95,43 @@ func (app *application) createLeague(ctx context.Context, event events.APIGatewa
 		return jsonResponse(400, map[string]string{"message": "Invalid JSON"}), nil
 	}
 
-	request.LeagueID = strings.TrimSpace(request.LeagueID)
 	request.Name = strings.TrimSpace(request.Name)
-	request.OwnerID = strings.TrimSpace(request.OwnerID)
-
-	if request.LeagueID == "" || request.Name == "" || request.OwnerID == "" {
-		return jsonResponse(400, map[string]string{
-			"message": "leagueId, name and ownerId are required",
-		}), nil
+	request.DisplayName = strings.TrimSpace(request.DisplayName)
+	validID := len(request.LeagueID) > 0 && len(request.LeagueID) <= maxLeagueIDBytes
+	for _, c := range request.LeagueID {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' || c == '-') {
+			validID = false
+		}
 	}
-
-	if len(request.LeagueID) > maxLeagueIDBytes || len(request.OwnerID) > maxLeagueIDBytes {
-		return jsonResponse(400, map[string]string{"message": "leagueId and ownerId must be at most 128 bytes"}), nil
+	if !validID || request.Name == "" || utf8.RuneCountInString(request.Name) > maxLeagueNameCharacters || request.DisplayName == "" || utf8.RuneCountInString(request.DisplayName) > 80 {
+		return jsonResponse(400, map[string]string{"message": "Invalid league details"}), nil
 	}
-	if utf8.RuneCountInString(request.Name) > maxLeagueNameCharacters {
-		return jsonResponse(400, map[string]string{"message": "name must be at most 200 characters"}), nil
-	}
-
-	league := League{
-		LeagueID:  request.LeagueID,
-		Name:      request.Name,
-		OwnerID:   request.OwnerID,
-		CreatedAt: time.Now().UTC().Format(time.RFC3339),
-	}
-
+	now := time.Now().UTC().Format(time.RFC3339)
+	league := League{LeagueID: request.LeagueID, Name: request.Name, OwnerID: memberID, CreatedAt: now}
+	member := Membership{LeagueID: request.LeagueID, MemberID: memberID, DisplayName: request.DisplayName, JoinedAt: now}
 	item, err := attributevalue.MarshalMap(league)
 	if err != nil {
-		log.Printf("encode league failed: %v", err)
-		return jsonResponse(500, map[string]string{
-			"message": "Unable to create league",
-		}), nil
+		return jsonResponse(500, map[string]string{"message": "Unable to create league"}), nil
 	}
-
-	_, err = app.db.PutItem(ctx, &dynamodb.PutItemInput{
-		TableName:           aws.String(app.leaguesTable),
-		Item:                item,
-		ConditionExpression: aws.String("attribute_not_exists(leagueId)"),
-	})
-
+	memberItem, err := attributevalue.MarshalMap(member)
 	if err != nil {
-		var conflict *types.ConditionalCheckFailedException
-		if errors.As(err, &conflict) {
-			return jsonResponse(409, map[string]string{
-				"message": "League already exists",
-			}), nil
+		return jsonResponse(500, map[string]string{"message": "Unable to create league"}), nil
+	}
+	_, err = app.db.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: []types.TransactWriteItem{
+		{Put: &types.Put{TableName: aws.String(app.leaguesTable), Item: item, ConditionExpression: aws.String("attribute_not_exists(leagueId)")}},
+		{Put: &types.Put{TableName: aws.String(app.membersTable), Item: memberItem, ConditionExpression: aws.String("attribute_not_exists(leagueId) AND attribute_not_exists(memberId)")}},
+	}})
+	if err != nil {
+		var canceled *types.TransactionCanceledException
+		if errors.As(err, &canceled) {
+			for _, reason := range canceled.CancellationReasons {
+				if aws.ToString(reason.Code) == "ConditionalCheckFailed" {
+					return jsonResponse(409, map[string]string{"message": "League already exists"}), nil
+				}
+			}
 		}
-
-		log.Printf("create league failed: %v", err)
-		return jsonResponse(500, map[string]string{
-			"message": "Unable to create league",
-		}), nil
+		log.Printf("create league transaction failed: %v", err)
+		return jsonResponse(500, map[string]string{"message": "Unable to create league"}), nil
 	}
 
 	return jsonResponse(201, CreateLeagueResponse{
