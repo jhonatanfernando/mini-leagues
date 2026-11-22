@@ -1,5 +1,11 @@
 mock_provider "aws" {
   override_during = plan
+  mock_resource "aws_cognito_user_pool" {
+    defaults = { id = "us-east-2_testpool" }
+  }
+  mock_resource "aws_cognito_user_pool_client" {
+    defaults = { id = "testclient" }
+  }
   mock_resource "aws_cloudfront_distribution" {
     defaults = { domain_name = "web.example.cloudfront.net" }
   }
@@ -81,6 +87,17 @@ run "league_authorization" {
       contains(aws_cognito_user_pool_client.web.logout_urls, "https://web.example.cloudfront.net/"),
     ])
     error_message = "The website must use a private S3 origin, HTTPS, and matching Cognito URLs."
+  }
+
+
+  assert {
+    condition = alltrue([
+      aws_cognito_user_pool_ui_customization.web.client_id == aws_cognito_user_pool_client.web.id,
+      aws_cognito_user_pool_ui_customization.web.user_pool_id == aws_cognito_user_pool.podium_picks.id,
+      aws_cognito_user_pool_ui_customization.web.css == file("${path.module}/branding/cognito.css"),
+      aws_cognito_user_pool_ui_customization.web.image_file == filebase64("${path.module}/branding/podium-picks.png"),
+    ])
+    error_message = "Classic branding must target only the web client and use the reviewed CSS and logo."
   }
 
 }

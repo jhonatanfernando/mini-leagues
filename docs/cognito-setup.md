@@ -47,6 +47,17 @@ persisting refresh tokens for this milestone. Reload can sign in again through
 the Cognito browser session. Logout must clear app memory and visit the hosted
 logout endpoint; already issued access tokens can remain valid until expiry.
 
+## Classic login branding
+
+Terraform manages the deployed client-specific classic hosted UI theme matching
+Podium Picks: a dark banner, lime buttons, light form background, and the app
+wordmark. The source vector, Cognito-compatible PNG, and restricted classic UI
+CSS live in `infra/branding/`. Cognito Lite remains in use. The classic layout
+and supported CSS properties are controlled by Cognito; this is not a custom
+login page. The branding was applied and a follow-up Terraform plan found no
+changes. Live sign-in and appearance testing require explicit authorization. The theme adds no AWS service; existing Cognito
+usage-based pricing remains unchanged.
+
 ## Local preparation and checks
 
 Use the current application root at `infra/`, region `us-east-2`, default workspace,

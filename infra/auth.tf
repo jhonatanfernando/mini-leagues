@@ -109,3 +109,11 @@ resource "aws_apigatewayv2_authorizer" "podium_picks" {
     audience = [aws_cognito_user_pool_client.web.id]
   }
 }
+
+# Classic hosted UI customization is scoped to this public app client.
+resource "aws_cognito_user_pool_ui_customization" "web" {
+  user_pool_id = aws_cognito_user_pool_domain.podium_picks.user_pool_id
+  client_id    = aws_cognito_user_pool_client.web.id
+  css          = file("${path.module}/branding/cognito.css")
+  image_file   = filebase64("${path.module}/branding/podium-picks.png")
+}

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 350 92" width="350" height="92">
+  <path fill="#b4ed65" d="M12 18h62l-8 56H4z"/>
+  <text x="13" y="59" fill="#101710" font-family="DejaVu Sans, sans-serif" font-size="33" font-weight="bold" font-style="italic" letter-spacing="-7">PP</text>
+  <text x="86" y="56" fill="#f2f3e9" font-family="DejaVu Sans Condensed, sans-serif" font-size="25" font-weight="bold" letter-spacing="0">PODIUM</text>
+  <text x="212" y="56" fill="#b4ed65" font-family="DejaVu Sans Condensed, sans-serif" font-size="25" font-weight="bold">PICKS</text>
+</svg>
