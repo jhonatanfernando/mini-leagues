@@ -2,7 +2,8 @@
 
 The Cognito foundation is deployed with refresh-token rotation disabled for Lite.
 The JWT route, membership configuration, and permission transition was applied;
-a follow-up plan found no changes. The browser login callback is not implemented. See the
+a follow-up plan found no changes. Browser PKCE sign-in is implemented in source;
+Localhost CORS is deployed; live authorization verification remains outstanding. See the
 [milestone contract](podium-picks-milestone.md) for the remaining authorization work.
 
 ## What will be created
@@ -62,8 +63,8 @@ URLs match exactly, including the trailing slash. The defaults use localhost;
 opening the app at 127.0.0.1 is not the same OAuth origin. Register exact HTTPS
 URLs once hosting exists; do not use wildcards. The variables reject non-HTTPS
 web destinations except localhost HTTP, fragments, and query strings. These
-settings register destinations only: `web/` has no callback implementation yet.
-Do not start real login until that task is implemented and tested.
+The browser callback is implemented and localhost CORS has been applied.
+Live testing requires explicit authorization.
 
 On an already initialized checkout, offline checks are:
 
@@ -109,9 +110,10 @@ league data. Never copy state or tokens into frontend configuration or chat.
   configure their exact Cognito sub; empty keeps creation disabled.
 - Verify the deployed JWT routes and required `podium-picks/play` scope with
   live requests only after obtaining explicit live-test authorization.
-- Implement the browser login/callback/logout flow with PKCE and state checks,
-  explicit public configuration, and tests for invalid/replayed callbacks.
-- Add exact-origin API CORS and test the login flow only with live-test permission.
+- Review and deploy the prepared browser login/callback/logout flow, PKCE and
+  state checks, and public configuration.
+- Test login and API calls against the deployed localhost CORS configuration only
+  with explicit live-test permission; hosted origins require a separate review.
 
 Live acceptance, when separately authorized: email sign-up requires verification,
 code+PKCE exchange issues access tokens, ID tokens are not accepted by scoped API

@@ -17,6 +17,9 @@ Go league reads enforce JWT identity and membership, and creation requires the
 configured organizer. Browser login remains a follow-up;
 creating a Cognito account alone must never grant access to league data.
 
+Website hosting is deployed with Terraform; see the [hosting review](docs/web-hosting.md)
+for the build, deployment approval steps, and expected usage costs.
+
 ## Repository structure
 
 ```text
@@ -44,8 +47,9 @@ npm run dev
 
 For verification and a static production build, run `npm run build` from `web/`.
 Output goes to ignored `web/dist/`. See [web setup](web/README.md) for details.
-The initial page is a scaffold, with no login or API requests. Friends cannot
-use the application until browser integration and the backend transition are complete.
+The browser app supports Cognito sign-in, organizer league creation, and member
+league lookup. Localhost CORS is deployed; invitations and game features remain
+future work. See [web setup](web/README.md).
 
 ## Local checks
 

@@ -132,3 +132,16 @@ variable "initial_organizer_sub" {
     error_message = "initial_organizer_sub must not have surrounding whitespace."
   }
 }
+
+variable "api_cors_origins" {
+  description = "Exact browser origins permitted to call the API; no wildcard."
+  type        = list(string)
+  default     = ["http://localhost:5173"]
+
+  validation {
+    condition = length(var.api_cors_origins) > 0 && alltrue([
+      for origin in var.api_cors_origins : can(regex("^(https://[a-zA-Z0-9.-]+(:[0-9]+)?|http://localhost(:[0-9]+)?)$", origin))
+    ])
+    error_message = "Provide exact HTTPS or http://localhost origins without paths or wildcards."
+  }
+}

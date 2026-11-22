@@ -1,6 +1,13 @@
 resource "aws_apigatewayv2_api" "mini_leagues" {
   name          = "joliveira-mini-leagues"
   protocol_type = "HTTP"
+
+  cors_configuration {
+    allow_origins = distinct(concat(var.api_cors_origins, [local.web_origin]))
+    allow_methods = ["GET", "POST", "OPTIONS"]
+    allow_headers = ["authorization", "content-type"]
+    max_age       = 300
+  }
 }
 
 resource "aws_apigatewayv2_integration" "create_league" {

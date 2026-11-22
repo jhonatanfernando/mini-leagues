@@ -1,5 +1,8 @@
 mock_provider "aws" {
   override_during = plan
+  mock_resource "aws_cloudfront_distribution" {
+    defaults = { domain_name = "web.example.cloudfront.net" }
+  }
   mock_resource "aws_dynamodb_table" {
     defaults = { arn = "arn:aws:dynamodb:us-east-2:123456789012:table/test" }
   }
@@ -53,6 +56,31 @@ run "league_authorization" {
       if can(toset(statement.Action))
     ])
     error_message = "Membership permissions must be limited to GetItem and PutItem on the membership table."
+  }
+
+
+  assert {
+    condition = alltrue([
+      toset(aws_apigatewayv2_api.mini_leagues.cors_configuration[0].allow_origins) == toset(["http://localhost:5173", "https://web.example.cloudfront.net"]),
+      toset(aws_apigatewayv2_api.mini_leagues.cors_configuration[0].allow_methods) == toset(["GET", "POST", "OPTIONS"]),
+      toset(aws_apigatewayv2_api.mini_leagues.cors_configuration[0].allow_headers) == toset(["authorization", "content-type"]),
+    ])
+    error_message = "CORS must allow localhost and the website origin with only the required methods and headers."
+  }
+
+
+  assert {
+    condition = alltrue([
+      aws_s3_bucket_public_access_block.web.block_public_acls,
+      aws_s3_bucket_public_access_block.web.block_public_policy,
+      aws_s3_bucket_public_access_block.web.ignore_public_acls,
+      aws_s3_bucket_public_access_block.web.restrict_public_buckets,
+      aws_cloudfront_origin_access_control.web.signing_behavior == "always",
+      aws_cloudfront_distribution.web.default_cache_behavior[0].viewer_protocol_policy == "redirect-to-https",
+      contains(aws_cognito_user_pool_client.web.callback_urls, "https://web.example.cloudfront.net/auth/callback"),
+      contains(aws_cognito_user_pool_client.web.logout_urls, "https://web.example.cloudfront.net/"),
+    ])
+    error_message = "The website must use a private S3 origin, HTTPS, and matching Cognito URLs."
   }
 
 }

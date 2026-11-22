@@ -67,8 +67,8 @@ resource "aws_cognito_user_pool_client" "web" {
   allowed_oauth_flows_user_pool_client          = true
   allowed_oauth_flows                           = ["code"]
   allowed_oauth_scopes                          = ["openid", "email", "${aws_cognito_resource_server.podium_picks.identifier}/play"]
-  callback_urls                                 = var.auth_callback_urls
-  logout_urls                                   = var.auth_logout_urls
+  callback_urls                                 = distinct(concat(var.auth_callback_urls, ["${local.web_origin}/auth/callback"]))
+  logout_urls                                   = distinct(concat(var.auth_logout_urls, ["${local.web_origin}/"]))
   prevent_user_existence_errors                 = "ENABLED"
   enable_token_revocation                       = true
   enable_propagate_additional_user_context_data = false

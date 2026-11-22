@@ -22,7 +22,8 @@ Implemented in source:
   requires an access token and nonblank, unpadded sub. Returns a generic error
   mapped to 401 by both league handlers.
 - `infra/auth.tf`: Cognito and a JWT authorizer attached to the league routes.
-- `web/`: buildable placeholder; no sign-in, callback, or API integration yet.
+- `web/`: Cognito PKCE sign-in, organizer league creation, and member league
+  lookup are implemented; localhost CORS is deployed, with live tests outstanding.
 
 Only POST /leagues and GET /leagues/{leagueId} are routed. JWT authorization and
 membership permissions have been applied; a follow-up plan found no changes.
@@ -208,11 +209,13 @@ intended identity scheme. No data migration is performed by this document.
 15. Scores/standings: manual fixtures verify 5/2/0, shared ranks, zero missing
     picks, multiple rounds, pagination, and identical totals after republishing.
 16. Gateway game routes: require JWT plus play scope everywhere, exact permissions.
-17. Browser login/join: PKCE and state validation, signup verification, safe token
-    handling, invitation preserved across login without logging it.
+17. Browser login: PKCE, state validation, and memory-only tokens implemented;
+    live verification and invitation-based joining remain outstanding.
 18. Browser predictions: save/edit, deadline display, stale-form rejection.
 19. Organizer/result/standings screens: direct unauthorized calls still fail.
-20. Hosting/CORS: exact browser origins and callbacks, private S3/HTTPS CloudFront.
+20. Hosting/CORS: private S3/HTTPS CloudFront and browser-origin/callback
+    configuration deployed; follow-up Terraform plan has no changes. Live
+    browser verification remains outstanding.
 21. Authorized two-browser rehearsal: join → edit → lock/reveal → publish twice →
     verify round points and standings. Record actual results.
 
